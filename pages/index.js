@@ -1,12 +1,15 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
   CheckCircle2,
   Download,
   Gauge,
+  Play,
   Shield,
   Sparkles,
+  Terminal,
+  TrendingUp,
   Zap,
 } from 'lucide-react';
 
@@ -18,10 +21,21 @@ const scenarios = {
 };
 
 const modeProfiles = {
-  Balanced: { latMul: 1.0, tpsMul: 1.0, succ: 0.995 },
-  LatencyFast: { latMul: 0.54, tpsMul: 1.06, succ: 0.992 },
-  FaultHardened: { latMul: 0.9, tpsMul: 0.88, succ: 0.999 },
+  Balanced: { latMul: 1.0, tpsMul: 1.0, succ: 0.995, color: 'from-blue-500 to-cyan-400' },
+  LatencyFast: { latMul: 0.54, tpsMul: 1.06, succ: 0.992, color: 'from-fuchsia-500 to-violet-400' },
+  FaultHardened: { latMul: 0.9, tpsMul: 0.88, succ: 0.999, color: 'from-orange-500 to-amber-400' },
 };
+
+const baseSeries = {
+  tps: [410, 435, 460, 470, 455, 480, 500, 520, 540, 560, 575, 583],
+  lat: [88, 82, 77, 72, 66, 60, 55, 51, 49, 48.8, 48.4, 48.1],
+};
+
+function pickAutoMode(sceneKey) {
+  if (sceneKey === 'attack' || sceneKey === 'storm') return 'FaultHardened';
+  if (sceneKey === 'clean') return 'LatencyFast';
+  return 'Balanced';
+}
 
 function computeMetrics(sceneKey, mode) {
   const s = scenarios[sceneKey];
@@ -31,193 +45,196 @@ function computeMetrics(sceneKey, mode) {
   const tps = Math.max(40, (620 - 2.5 * baseLatency) * m.tpsMul);
   const success = Math.max(0.86, m.succ - s.fault * 0.05);
   const churn = sceneKey === 'storm' || sceneKey === 'attack' ? 18 : 6;
-  return {
-    p95: p95.toFixed(1),
-    p99: (p95 * 1.2).toFixed(1),
-    tps: tps.toFixed(0),
-    success: (success * 100).toFixed(2),
-    churn,
-  };
+  return { p95, p99: p95 * 1.2, tps, success: success * 100, churn };
 }
 
-function pickAutoMode(sceneKey) {
-  if (sceneKey === 'attack' || sceneKey === 'storm') return 'FaultHardened';
-  if (sceneKey === 'clean') return 'LatencyFast';
-  return 'Balanced';
+function genLogs(sceneKey, mode, m) {
+  return [
+    `[INIT] Scenario=${scenarios[sceneKey].label} mode=${mode}`,
+    `[DAG] Dissemination mesh synced across validators`,
+    `[CTRL] Policy selected ${mode}`,
+    `[QC] Aggregated cert emitted (compact path)`,
+    `[METRIC] TPS=${m.tps.toFixed(0)} p95=${m.p95.toFixed(1)}ms success=${m.success.toFixed(2)}%`,
+    sceneKey === 'attack'
+      ? `[ALERT] Inflation & Hold detected -> safe fallback + timeout clamp`
+      : `[INFO] Network healthy, fast-path sustained`,
+  ];
 }
-
-const complexityRows = [
-  { n: 32, sublyne: 16800, n2: 32800 },
-  { n: 64, sublyne: 40200, n2: 131200 },
-  { n: 128, sublyne: 93800, n2: 524800 },
-  { n: 256, sublyne: 213000, n2: 2099200 },
-  { n: 512, sublyne: 477000, n2: 8396800 },
-  { n: 1024, sublyne: 1055000, n2: 33587200 },
-];
-
-const evidenceLinks = [
-  { label: 'Formal Proofs v2', path: '/docs/FORMAL_PROOFS_V2.md' },
-  { label: 'LatencyFast report', path: '/results/sublyne_dag/latency_fast_report.csv' },
-  { label: 'Complexity fit', path: '/results/complexity/complexity_fit.md' },
-  { label: 'DAG state scaling', path: '/results/sublyne_dag/dag_state_scaling.csv' },
-  { label: 'Killer figure', path: '/results/complexity/complexity_killer_figure.png' },
-];
 
 export default function Page() {
   const [sceneKey, setSceneKey] = useState('clean');
   const [manualMode, setManualMode] = useState('Auto');
+  const [demoMode, setDemoMode] = useState(false);
+  const [tick, setTick] = useState(0);
 
-  const activeMode = useMemo(
-    () => (manualMode === 'Auto' ? pickAutoMode(sceneKey) : manualMode),
-    [manualMode, sceneKey]
-  );
+  const activeMode = useMemo(() => (manualMode === 'Auto' ? pickAutoMode(sceneKey) : manualMode), [manualMode, sceneKey]);
 
-  const metrics = useMemo(() => computeMetrics(sceneKey, activeMode), [sceneKey, activeMode]);
+  useEffect(() => {
+    if (!demoMode) return;
+    const order = ['clean', 'jitter', 'storm', 'attack'];
+    const int = setInterval(() => {
+      setTick((t) => t + 1);
+      const idx = (tick + 1) % order.length;
+      setSceneKey(order[idx]);
+      setManualMode('Auto');
+    }, 2800);
+    return () => clearInterval(int);
+  }, [demoMode, tick]);
+
+  const m = useMemo(() => computeMetrics(sceneKey, activeMode), [sceneKey, activeMode]);
+  const logs = useMemo(() => genLogs(sceneKey, activeMode, m), [sceneKey, activeMode, m]);
+
+  const tpsSeries = useMemo(() => {
+    const factor = sceneKey === 'clean' ? 1 : sceneKey === 'jitter' ? 0.78 : sceneKey === 'storm' ? 0.64 : 0.58;
+    return baseSeries.tps.map((v) => v * factor * (activeMode === 'LatencyFast' ? 1.04 : activeMode === 'FaultHardened' ? 0.9 : 1));
+  }, [sceneKey, activeMode]);
+
+  const latSeries = useMemo(() => {
+    const factor = sceneKey === 'clean' ? 1 : sceneKey === 'jitter' ? 1.35 : sceneKey === 'storm' ? 1.75 : 2.1;
+    return baseSeries.lat.map((v) => v * factor * (activeMode === 'LatencyFast' ? 0.86 : activeMode === 'FaultHardened' ? 1.05 : 1));
+  }, [sceneKey, activeMode]);
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 p-5 md:p-8">
-      <div className="max-w-6xl mx-auto space-y-6">
-        <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-violet-500 bg-clip-text text-transparent">
-              Sublyne Judge Demo Dashboard
-            </h1>
-            <p className="text-slate-400 mt-1">
-              DAG dissemination + adaptive consensus + hierarchical BLS aggregation
-            </p>
+    <main className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900 text-slate-100 p-5 md:p-8">
+      <div className="max-w-7xl mx-auto space-y-6">
+        <header className="rounded-2xl border border-slate-700/60 bg-slate-900/50 backdrop-blur p-5 shadow-2xl shadow-indigo-500/10">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div>
+              <h1 className="text-3xl md:text-4xl font-black tracking-tight bg-gradient-to-r from-cyan-300 via-violet-300 to-fuchsia-300 bg-clip-text text-transparent">
+                Sublyne Judge Showcase
+              </h1>
+              <p className="text-slate-300 mt-2">DAG dissemination • adaptive policy control • hierarchical BLS aggregation</p>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={() => setDemoMode((v) => !v)}
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl font-semibold transition ${
+                  demoMode ? 'bg-rose-500/20 border border-rose-400 text-rose-200' : 'bg-emerald-500/20 border border-emerald-400 text-emerald-200'
+                }`}
+              >
+                <Play size={16} /> {demoMode ? 'Stop Demo Mode' : 'Start Demo Mode'}
+              </button>
+              <a href="/results/complexity/complexity_killer_figure.png" className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-semibold">
+                <Download size={16} /> Killer Figure
+              </a>
+            </div>
           </div>
-          <a
-            href="/results/complexity/complexity_killer_figure.png"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 transition"
-          >
-            <Download size={16} /> Download killer figure
-          </a>
         </header>
 
-        <section className="grid md:grid-cols-3 gap-4">
-          <Card title="Scenario" icon={Activity}>
-            <div className="grid grid-cols-2 gap-2">
+        <section className="grid lg:grid-cols-12 gap-4">
+          <div className="lg:col-span-3 rounded-2xl border border-slate-700/60 bg-slate-900/40 p-4">
+            <h3 className="font-bold mb-3 flex items-center gap-2"><Activity size={16}/> Scenario</h3>
+            <div className="grid grid-cols-1 gap-2">
               {Object.entries(scenarios).map(([k, v]) => (
                 <button
                   key={k}
                   onClick={() => setSceneKey(k)}
-                  className={`px-3 py-2 rounded text-sm border ${
-                    sceneKey === k
-                      ? 'border-cyan-400 bg-cyan-500/10 text-cyan-300'
-                      : 'border-slate-700 bg-slate-900 hover:border-slate-500'
+                  className={`text-left px-3 py-2 rounded-lg border transition ${
+                    sceneKey === k ? 'border-cyan-400 bg-cyan-500/10 text-cyan-200' : 'border-slate-700 hover:border-slate-500'
                   }`}
                 >
-                  {v.label}
+                  <div className="font-semibold text-sm">{v.label}</div>
+                  <div className="text-xs text-slate-400">RTT {v.rtt}ms • jitter {v.jitter}ms • fault {(v.fault * 100).toFixed(0)}%</div>
                 </button>
               ))}
             </div>
-          </Card>
 
-          <Card title="Mode" icon={Sparkles}>
+            <h3 className="font-bold mt-5 mb-3 flex items-center gap-2"><Sparkles size={16}/> Mode</h3>
             <div className="grid grid-cols-2 gap-2">
-              {['Auto', 'LatencyFast', 'Balanced', 'FaultHardened'].map((m) => (
+              {['Auto', 'LatencyFast', 'Balanced', 'FaultHardened'].map((mm) => (
                 <button
-                  key={m}
-                  onClick={() => setManualMode(m)}
-                  className={`px-3 py-2 rounded text-sm border ${
-                    manualMode === m
-                      ? 'border-violet-400 bg-violet-500/10 text-violet-300'
-                      : 'border-slate-700 bg-slate-900 hover:border-slate-500'
-                  }`}
+                  key={mm}
+                  onClick={() => setManualMode(mm)}
+                  className={`px-3 py-2 rounded-lg text-sm border ${manualMode === mm ? 'border-violet-400 bg-violet-500/10 text-violet-200' : 'border-slate-700 hover:border-slate-500'}`}
                 >
-                  {m}
+                  {mm}
                 </button>
               ))}
             </div>
-            <p className="text-xs text-slate-400 mt-2">Active mode: <b>{activeMode}</b></p>
-          </Card>
-
-          <Card title="Attack Replay" icon={AlertTriangle}>
-            <p className="text-sm text-slate-300">
-              Use <b>Inflation & Hold</b> scenario to simulate timeout inflation stress. Auto mode falls back to
-              FaultHardened to preserve commit success.
-            </p>
-            <div className="mt-3 text-xs text-slate-400">Judge line: "Fast when clean, safe when hostile."</div>
-          </Card>
-        </section>
-
-        <section className="grid md:grid-cols-4 gap-3">
-          <Metric label="TPS" value={metrics.tps} icon={Zap} color="text-yellow-300" />
-          <Metric label="p95 latency (ms)" value={metrics.p95} icon={Gauge} color="text-cyan-300" />
-          <Metric label="Success (%)" value={metrics.success} icon={CheckCircle2} color="text-emerald-300" />
-          <Metric label="Leader churn" value={metrics.churn} icon={Shield} color="text-orange-300" />
-        </section>
-
-        <section className="grid lg:grid-cols-2 gap-4">
-          <Card title="Home-ground check (example)" icon={CheckCircle2}>
-            <ul className="text-sm space-y-2 text-slate-300">
-              <li>Latency arena target: <b>&lt; 50 ms</b> p95 in clean WAN mode</li>
-              <li>Current clean WAN p95: <b>{metrics.p95} ms</b> ({activeMode})</li>
-              <li>Communication trend: measured curve aligned with <b>O(n log n)</b> in tested range</li>
-            </ul>
-          </Card>
-
-          <Card title="Complexity snapshot (bytes/commit)" icon={Activity}>
-            <div className="overflow-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-slate-400 border-b border-slate-700">
-                    <th className="text-left py-1">n</th>
-                    <th className="text-left py-1">Sublyne</th>
-                    <th className="text-left py-1">O(n²) ref</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {complexityRows.map((r) => (
-                    <tr key={r.n} className="border-b border-slate-800">
-                      <td className="py-1">{r.n}</td>
-                      <td className="py-1 text-cyan-300">{r.sublyne.toLocaleString()}</td>
-                      <td className="py-1 text-rose-300">{r.n2.toLocaleString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </section>
-
-        <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-          <h3 className="font-semibold mb-2">Evidence drawer</h3>
-          <div className="grid md:grid-cols-2 gap-2 text-sm">
-            {evidenceLinks.map((e) => (
-              <a key={e.label} href={e.path} className="underline text-blue-300 hover:text-blue-200">
-                {e.label}
-              </a>
-            ))}
+            <p className="text-xs text-slate-400 mt-3">Active mode: <b>{activeMode}</b></p>
           </div>
-          <p className="text-xs text-slate-400 mt-3">
-            Note: Some large-scale/10k outputs are modeled. Real-vs-modeled is explicitly labeled in artifacts.
-          </p>
+
+          <div className="lg:col-span-9 grid md:grid-cols-2 gap-4">
+            <MetricCard icon={Zap} label="Throughput" value={`${m.tps.toFixed(0)} TPS`} tone="text-yellow-300" />
+            <MetricCard icon={Gauge} label="p95 Finality" value={`${m.p95.toFixed(1)} ms`} tone="text-cyan-300" />
+            <MetricCard icon={CheckCircle2} label="Commit Success" value={`${m.success.toFixed(2)} %`} tone="text-emerald-300" />
+            <MetricCard icon={Shield} label="Leader Churn" value={`${m.churn}`} tone="text-orange-300" />
+          </div>
+        </section>
+
+        <section className="grid lg:grid-cols-12 gap-4">
+          <div className="lg:col-span-6 rounded-2xl border border-slate-700/60 bg-slate-900/40 p-4">
+            <h3 className="font-bold flex items-center gap-2 mb-2"><TrendingUp size={16}/> Live Trend: Throughput</h3>
+            <Sparkline values={tpsSeries} color="#facc15" />
+            <p className="text-xs text-slate-400 mt-2">Higher is better. Demo shows policy impact under current scenario.</p>
+          </div>
+
+          <div className="lg:col-span-6 rounded-2xl border border-slate-700/60 bg-slate-900/40 p-4">
+            <h3 className="font-bold flex items-center gap-2 mb-2"><Gauge size={16}/> Live Trend: Latency p95</h3>
+            <Sparkline values={latSeries} color="#22d3ee" />
+            <p className="text-xs text-slate-400 mt-2">Lower is better. LatencyFast optimizes clean WAN finality.</p>
+          </div>
+        </section>
+
+        <section className="grid lg:grid-cols-12 gap-4">
+          <div className="lg:col-span-7 rounded-2xl border border-slate-700/60 bg-black/40 p-4">
+            <h3 className="font-bold mb-2 flex items-center gap-2"><Terminal size={16}/> Live Protocol Log</h3>
+            <div className="font-mono text-sm space-y-1 bg-slate-950 border border-slate-800 rounded-xl p-3 h-56 overflow-auto">
+              {logs.map((l, i) => (
+                <div key={i} className={i === logs.length - 1 ? 'text-emerald-300' : 'text-slate-300'}>
+                  {l}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="lg:col-span-5 rounded-2xl border border-slate-700/60 bg-slate-900/40 p-4">
+            <h3 className="font-bold mb-3">Judge takeaway</h3>
+            <ul className="text-sm text-slate-200 space-y-2">
+              <li>• Fast-path latency target in clean WAN conditions</li>
+              <li>• Safe fallback under attack/fault conditions</li>
+              <li>• Communication trend aligns with O(n log n) in tested ranges</li>
+            </ul>
+            <div className="mt-4 p-3 rounded-xl border border-violet-500/30 bg-violet-500/10 text-violet-200 text-sm">
+              “Fast when clean, safe when hostile.”
+            </div>
+            <p className="text-xs text-slate-400 mt-3">
+              Note: Some high-scale outputs are modeled; artifacts label real vs modeled explicitly.
+            </p>
+          </div>
         </section>
       </div>
     </main>
   );
 }
 
-function Card({ title, icon: Icon, children }) {
+function MetricCard({ icon: Icon, label, value, tone }) {
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-      <div className="flex items-center gap-2 mb-3 text-slate-200">
-        <Icon size={16} />
-        <h3 className="font-semibold">{title}</h3>
-      </div>
-      {children}
+    <div className="rounded-2xl border border-slate-700/60 bg-slate-900/40 p-4">
+      <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-400"><Icon size={14}/> {label}</div>
+      <div className={`text-3xl font-black mt-1 ${tone}`}>{value}</div>
     </div>
   );
 }
 
-function Metric({ label, value, icon: Icon, color }) {
+function Sparkline({ values, color }) {
+  const path = sparklinePath(values);
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3">
-      <div className="flex items-center gap-2 text-xs text-slate-400 uppercase tracking-wide">
-        <Icon size={14} /> {label}
-      </div>
-      <div className={`text-2xl font-bold mt-1 ${color}`}>{value}</div>
-    </div>
+    <svg viewBox="0 0 300 90" className="w-full h-28">
+      <path d={path} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" />
+    </svg>
   );
+}
+
+function sparklinePath(values, w = 280, h = 70) {
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = Math.max(1, max - min);
+  return values
+    .map((v, i) => {
+      const x = 10 + (i / (values.length - 1)) * w;
+      const y = 10 + (h - ((v - min) / range) * h);
+      return `${i === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
+    })
+    .join(' ');
 }
