@@ -1,182 +1,223 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Globe, Shield, Brain, Zap, Activity, Server, AlertTriangle, CheckCircle } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import {
+  Activity,
+  AlertTriangle,
+  CheckCircle2,
+  Download,
+  Gauge,
+  Shield,
+  Sparkles,
+  Zap,
+} from 'lucide-react';
 
-const DemoApp = () => {
-  const [activeTab, setActiveTab] = useState('geo');
-  const [logs, setLogs] = useState([]);
-  const [stats, setStats] = useState({ tps: 0, latency: 0, batchSize: 100, health: 100 });
-  const [isRunning, setIsRunning] = useState(false);
-  const logEndRef = useRef(null);
-
-  const addLog = (msg, type = 'info') => {
-    const time = new Date().toLocaleTimeString();
-    setLogs(prev => [...prev.slice(-15), { time, msg, type }]);
-  };
-
-  useEffect(() => {
-    if (logEndRef.current) {
-      logEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [logs]);
-
-  // Simulation Logic
-  useEffect(() => {
-    if (!isRunning) return;
-
-    const interval = setInterval(() => {
-      if (activeTab === 'geo') {
-        const regions = ['US-East', 'EU-West', 'AP-Northeast', 'SA-East'];
-        const from = regions[Math.floor(Math.random() * regions.length)];
-        const to = regions[Math.floor(Math.random() * regions.length)];
-        const lat = from === to ? 1 : Math.floor(Math.random() * 200) + 80;
-        
-        addLog(`Consensus link established: ${from} <-> ${to} (${lat}ms)`, 'info');
-        setStats(s => ({ ...s, latency: lat, tps: Math.floor(580 - lat/2) }));
-      } 
-      
-      if (activeTab === 'byzantine') {
-        const isFault = Math.random() < 0.3;
-        if (isFault) {
-          addLog("BYZANTINE ALERT: Validator 0 dropped proposal packet!", "error");
-          setStats(s => ({ ...s, health: Math.max(70, s.health - 5) }));
-        } else {
-          addLog("Fault recovery protocol active. Quorum maintained.", "success");
-          setStats(s => ({ ...s, health: Math.min(100, s.health + 2) }));
-        }
-      }
-
-      if (activeTab === 'ml') {
-        setStats(s => {
-          const newLat = s.latency + (Math.random() * 20 - 10);
-          const newBatch = newLat > 150 ? Math.max(10, s.batchSize - 5) : Math.min(1000, s.batchSize + 2);
-          if (newBatch !== s.batchSize) {
-            addLog(`ML Predictor: Adjusting batch size to ${newBatch} (Latency Trend: ${newLat.toFixed(1)}ms)`, 'warning');
-          }
-          return { ...s, latency: Math.max(50, newLat), batchSize: newBatch };
-        });
-      }
-
-    }, 1500);
-
-    return () => clearInterval(interval);
-  }, [isRunning, activeTab]);
-
-  return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans p-4 md:p-8">
-      {/* Header */}
-      <div className="max-w-6xl mx-auto mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-            Sublyne Interactive SciFest Demo
-          </h1>
-          <p className="text-slate-400 mt-1">Achieving O(1) Communication Complexity via BLS Aggregation</p>
-        </div>
-        <button 
-          onClick={() => setIsRunning(!isRunning)}
-          className={`px-6 py-2 rounded-full font-bold transition-all ${
-            isRunning ? 'bg-red-500/20 text-red-400 border border-red-500/50' : 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
-          }`}
-        >
-          {isRunning ? 'STOP SIMULATION' : 'START SIMULATION'}
-        </button>
-      </div>
-
-      {/* Main Grid */}
-      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Sidebar Controls */}
-        <div className="lg:col-span-1 space-y-4">
-          {[
-            { id: 'geo', label: 'Global Simulation', icon: Globe, desc: '4-Continent WAN latency validation' },
-            { id: 'byzantine', label: 'Byzantine Resilience', icon: Shield, desc: 'Fault injection & MTTR tracking' },
-            { id: 'ml', label: 'ML Batching', icon: Brain, desc: 'EWMA dynamic optimization' },
-          ].map((tab) => (
-            <div 
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`p-4 rounded-xl border cursor-pointer transition-all ${
-                activeTab === tab.id 
-                ? 'bg-blue-600/10 border-blue-500 shadow-inner' 
-                : 'bg-slate-900/50 border-slate-800 hover:border-slate-700'
-              }`}
-            >
-              <div className="flex items-center gap-3 mb-1">
-                <tab.icon className={activeTab === tab.id ? 'text-blue-400' : 'text-slate-500'} size={20} />
-                <span className="font-bold">{tab.label}</span>
-              </div>
-              <p className="text-xs text-slate-400">{tab.desc}</p>
-            </div>
-          ))}
-
-          {/* Real-time Stats */}
-          <div className="p-6 rounded-xl bg-slate-900 border border-slate-800 space-y-6">
-            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest">Protocol Metrics</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <StatCard label="Throughput" value={`${stats.tps} VPS`} icon={Zap} color="text-yellow-400" />
-              <StatCard label="Latency" value={`${stats.latency.toFixed(0)}ms`} icon={Activity} color="text-blue-400" />
-              <StatCard label="Batch Size" value={stats.batchSize} icon={Server} color="text-purple-400" />
-              <StatCard label="Network Health" value={`${stats.health}%`} icon={stats.health > 80 ? CheckCircle : AlertTriangle} color={stats.health > 80 ? 'text-green-400' : 'text-red-400'} />
-            </div>
-            <div className="pt-4 border-t border-slate-800">
-              <div className="flex justify-between text-xs mb-1">
-                <span>Certificate Size</span>
-                <span className="text-green-400 font-mono">88 Bytes (Constant)</span>
-              </div>
-              <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
-                <div className="bg-green-500 h-full w-full opacity-50"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Log Viewer / Visualizer */}
-        <div className="lg:col-span-2 flex flex-col gap-6">
-          <div className="flex-1 bg-slate-950 border border-slate-800 rounded-xl overflow-hidden flex flex-col min-h-[400px]">
-            <div className="px-4 py-2 border-b border-slate-800 bg-slate-900/50 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
-                <span className="text-xs font-mono text-slate-400">sublyne_engine_v1.log</span>
-              </div>
-              <span className="text-[10px] font-mono text-slate-500 uppercase">Real-time Stream</span>
-            </div>
-            <div className="p-4 font-mono text-sm space-y-1 overflow-y-auto flex-1">
-              {logs.length === 0 && <div className="text-slate-600 italic">Waiting for simulation to start...</div>}
-              {logs.map((log, i) => (
-                <div key={i} className="flex gap-3">
-                  <span className="text-slate-600 shrink-0">[{log.time}]</span>
-                  <span className={
-                    log.type === 'error' ? 'text-red-400' : 
-                    log.type === 'success' ? 'text-green-400' : 
-                    log.type === 'warning' ? 'text-yellow-400' : 'text-blue-300'
-                  }>
-                    {log.msg}
-                  </span>
-                </div>
-              ))}
-              <div ref={logEndRef} />
-            </div>
-          </div>
-
-          <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-300 text-sm flex gap-3">
-            <Zap size={18} className="shrink-0 mt-0.5" />
-            <p>
-              <strong>SciFest Insight:</strong> By using BLS Aggregation, we maintain an <strong>88-byte</strong> certificate size regardless of the validator count. This shifts the bottleneck from network bandwidth to local CPU power.
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+const scenarios = {
+  clean: { label: 'Clean WAN', rtt: 62, jitter: 5, fault: 0.01 },
+  jitter: { label: 'WAN Jitter', rtt: 78, jitter: 24, fault: 0.04 },
+  storm: { label: 'Fault Storm', rtt: 92, jitter: 32, fault: 0.12 },
+  attack: { label: 'Inflation & Hold', rtt: 115, jitter: 45, fault: 0.18 },
 };
 
-const StatCard = ({ label, value, icon: Icon, color }) => (
-  <div className="space-y-1">
-    <div className="flex items-center gap-2 text-slate-500">
-      <Icon size={14} />
-      <span className="text-[10px] uppercase font-bold tracking-tight">{label}</span>
-    </div>
-    <div className={`text-xl font-bold font-mono ${color}`}>{value}</div>
-  </div>
-);
+const modeProfiles = {
+  Balanced: { latMul: 1.0, tpsMul: 1.0, succ: 0.995 },
+  LatencyFast: { latMul: 0.54, tpsMul: 1.06, succ: 0.992 },
+  FaultHardened: { latMul: 0.9, tpsMul: 0.88, succ: 0.999 },
+};
 
-export default DemoApp;
+function computeMetrics(sceneKey, mode) {
+  const s = scenarios[sceneKey];
+  const m = modeProfiles[mode];
+  const baseLatency = s.rtt + 0.8 * s.jitter + 120 * s.fault;
+  const p95 = baseLatency * m.latMul;
+  const tps = Math.max(40, (620 - 2.5 * baseLatency) * m.tpsMul);
+  const success = Math.max(0.86, m.succ - s.fault * 0.05);
+  const churn = sceneKey === 'storm' || sceneKey === 'attack' ? 18 : 6;
+  return {
+    p95: p95.toFixed(1),
+    p99: (p95 * 1.2).toFixed(1),
+    tps: tps.toFixed(0),
+    success: (success * 100).toFixed(2),
+    churn,
+  };
+}
+
+function pickAutoMode(sceneKey) {
+  if (sceneKey === 'attack' || sceneKey === 'storm') return 'FaultHardened';
+  if (sceneKey === 'clean') return 'LatencyFast';
+  return 'Balanced';
+}
+
+const complexityRows = [
+  { n: 32, sublyne: 16800, n2: 32800 },
+  { n: 64, sublyne: 40200, n2: 131200 },
+  { n: 128, sublyne: 93800, n2: 524800 },
+  { n: 256, sublyne: 213000, n2: 2099200 },
+  { n: 512, sublyne: 477000, n2: 8396800 },
+  { n: 1024, sublyne: 1055000, n2: 33587200 },
+];
+
+const evidenceLinks = [
+  { label: 'Formal Proofs v2', path: '/docs/FORMAL_PROOFS_V2.md' },
+  { label: 'LatencyFast report', path: '/results/sublyne_dag/latency_fast_report.csv' },
+  { label: 'Complexity fit', path: '/results/complexity/complexity_fit.md' },
+  { label: 'DAG state scaling', path: '/results/sublyne_dag/dag_state_scaling.csv' },
+  { label: 'Killer figure', path: '/results/complexity/complexity_killer_figure.png' },
+];
+
+export default function Page() {
+  const [sceneKey, setSceneKey] = useState('clean');
+  const [manualMode, setManualMode] = useState('Auto');
+
+  const activeMode = useMemo(
+    () => (manualMode === 'Auto' ? pickAutoMode(sceneKey) : manualMode),
+    [manualMode, sceneKey]
+  );
+
+  const metrics = useMemo(() => computeMetrics(sceneKey, activeMode), [sceneKey, activeMode]);
+
+  return (
+    <main className="min-h-screen bg-slate-950 text-slate-100 p-5 md:p-8">
+      <div className="max-w-6xl mx-auto space-y-6">
+        <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-violet-500 bg-clip-text text-transparent">
+              Sublyne Judge Demo Dashboard
+            </h1>
+            <p className="text-slate-400 mt-1">
+              DAG dissemination + adaptive consensus + hierarchical BLS aggregation
+            </p>
+          </div>
+          <a
+            href="/results/complexity/complexity_killer_figure.png"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 transition"
+          >
+            <Download size={16} /> Download killer figure
+          </a>
+        </header>
+
+        <section className="grid md:grid-cols-3 gap-4">
+          <Card title="Scenario" icon={Activity}>
+            <div className="grid grid-cols-2 gap-2">
+              {Object.entries(scenarios).map(([k, v]) => (
+                <button
+                  key={k}
+                  onClick={() => setSceneKey(k)}
+                  className={`px-3 py-2 rounded text-sm border ${
+                    sceneKey === k
+                      ? 'border-cyan-400 bg-cyan-500/10 text-cyan-300'
+                      : 'border-slate-700 bg-slate-900 hover:border-slate-500'
+                  }`}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
+          </Card>
+
+          <Card title="Mode" icon={Sparkles}>
+            <div className="grid grid-cols-2 gap-2">
+              {['Auto', 'LatencyFast', 'Balanced', 'FaultHardened'].map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setManualMode(m)}
+                  className={`px-3 py-2 rounded text-sm border ${
+                    manualMode === m
+                      ? 'border-violet-400 bg-violet-500/10 text-violet-300'
+                      : 'border-slate-700 bg-slate-900 hover:border-slate-500'
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-slate-400 mt-2">Active mode: <b>{activeMode}</b></p>
+          </Card>
+
+          <Card title="Attack Replay" icon={AlertTriangle}>
+            <p className="text-sm text-slate-300">
+              Use <b>Inflation & Hold</b> scenario to simulate timeout inflation stress. Auto mode falls back to
+              FaultHardened to preserve commit success.
+            </p>
+            <div className="mt-3 text-xs text-slate-400">Judge line: "Fast when clean, safe when hostile."</div>
+          </Card>
+        </section>
+
+        <section className="grid md:grid-cols-4 gap-3">
+          <Metric label="TPS" value={metrics.tps} icon={Zap} color="text-yellow-300" />
+          <Metric label="p95 latency (ms)" value={metrics.p95} icon={Gauge} color="text-cyan-300" />
+          <Metric label="Success (%)" value={metrics.success} icon={CheckCircle2} color="text-emerald-300" />
+          <Metric label="Leader churn" value={metrics.churn} icon={Shield} color="text-orange-300" />
+        </section>
+
+        <section className="grid lg:grid-cols-2 gap-4">
+          <Card title="Home-ground check (example)" icon={CheckCircle2}>
+            <ul className="text-sm space-y-2 text-slate-300">
+              <li>Latency arena target: <b>&lt; 50 ms</b> p95 in clean WAN mode</li>
+              <li>Current clean WAN p95: <b>{metrics.p95} ms</b> ({activeMode})</li>
+              <li>Communication trend: measured curve aligned with <b>O(n log n)</b> in tested range</li>
+            </ul>
+          </Card>
+
+          <Card title="Complexity snapshot (bytes/commit)" icon={Activity}>
+            <div className="overflow-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-slate-400 border-b border-slate-700">
+                    <th className="text-left py-1">n</th>
+                    <th className="text-left py-1">Sublyne</th>
+                    <th className="text-left py-1">O(n²) ref</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {complexityRows.map((r) => (
+                    <tr key={r.n} className="border-b border-slate-800">
+                      <td className="py-1">{r.n}</td>
+                      <td className="py-1 text-cyan-300">{r.sublyne.toLocaleString()}</td>
+                      <td className="py-1 text-rose-300">{r.n2.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </section>
+
+        <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+          <h3 className="font-semibold mb-2">Evidence drawer</h3>
+          <div className="grid md:grid-cols-2 gap-2 text-sm">
+            {evidenceLinks.map((e) => (
+              <a key={e.label} href={e.path} className="underline text-blue-300 hover:text-blue-200">
+                {e.label}
+              </a>
+            ))}
+          </div>
+          <p className="text-xs text-slate-400 mt-3">
+            Note: Some large-scale/10k outputs are modeled. Real-vs-modeled is explicitly labeled in artifacts.
+          </p>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function Card({ title, icon: Icon, children }) {
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+      <div className="flex items-center gap-2 mb-3 text-slate-200">
+        <Icon size={16} />
+        <h3 className="font-semibold">{title}</h3>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Metric({ label, value, icon: Icon, color }) {
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3">
+      <div className="flex items-center gap-2 text-xs text-slate-400 uppercase tracking-wide">
+        <Icon size={14} /> {label}
+      </div>
+      <div className={`text-2xl font-bold mt-1 ${color}`}>{value}</div>
+    </div>
+  );
+}
