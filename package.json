@@ -9,15 +9,15 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@tailwindcss/postcss": "latest",
+    "autoprefixer": "^10.4.27",
+    "clsx": "latest",
+    "lucide-react": "latest",
     "next": "latest",
+    "postcss": "^8.5.6",
     "react": "latest",
     "react-dom": "latest",
-    "lucide-react": "latest",
-    "clsx": "latest",
     "tailwind-merge": "latest",
-    "tailwindcss": "latest",
-    "@tailwindcss/postcss": "latest",
-    "postcss": "latest",
-    "autoprefixer": "latest"
+    "tailwindcss": "^3.4.19"
   }
 }
